@@ -1,0 +1,18 @@
+{
+  "name": "pa11y-backend",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "body-parser": "^1.20.2",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "mongoose": "^7.6.1",
+    "pa11y": "^6.0.1",
+    "puppeteer": "^21.3.8",
+    "@clerk/clerk-sdk-node": "^4.0.6"
+  }
+}
