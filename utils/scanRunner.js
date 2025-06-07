@@ -10,9 +10,9 @@ export const runScan = async (url) => {
             args: ['--no-sandbox', '--disable-setuid-sandbox'],
             headless: 'new'
         },
-        actions: [
-            `setUserAgent ${USER_AGENT}`
-        ],
+        page: async (page) => {
+            await page.setUserAgent(USER_AGENT);
+        },
         includeNotices: true,
         includeWarnings: true,
         standard: 'WCAG2AA'
