@@ -19,7 +19,8 @@
     "@clerk/clerk-sdk-node": "^4.0.6",
     "dotenv": "^16.3.1",
     "helmet": "^7.1.0",
-    "compression": "^1.7.4"
+    "compression": "^1.7.4",
+    "nodemailer": "^6.9.13"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
