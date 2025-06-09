@@ -62,7 +62,7 @@ async function getElementScreenshot(page, selector, options = {}) {
             }, selector, viewportPadding);
 
             // Wait for any animations to complete
-            await page.waitForTimeout(100);
+            await new Promise(resolve => setTimeout(resolve, 100));
 
             // Highlight the element
             await page.evaluate(sel => {
