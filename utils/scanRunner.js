@@ -174,14 +174,11 @@ export const runScan = async (url) => {
             })
         );
 
-        // Process Pa11y passed tests with screenshots
-        pa11yPassedWithScreens = await Promise.all(
-            (pa11yResult.passed || []).map(async (passed) => {
-                if (!passed.selector) return { ...passed, screenshot: null };
-                const screenshot = await getElementScreenshot(page, passed.selector);
-                return { ...passed, screenshot };
-            })
-        );
+        // Process Pa11y passed tests WITHOUT screenshots
+        pa11yPassedWithScreens = (pa11yResult.passed || []).map((passed) => ({
+            ...passed,
+            screenshot: null
+        }));
 
         // Process Axe violations with screenshots
         axeViolationsWithScreens = await Promise.all(
@@ -198,20 +195,11 @@ export const runScan = async (url) => {
             })
         );
 
-        // Process Axe passes with screenshots
-        const axePassesWithScreens = await Promise.all(
-            (axeResults.passes || []).map(async (pass) => {
-                const nodesWithScreens = await Promise.all(
-                    pass.nodes.map(async (node) => {
-                        const selector = (node.target && node.target[0]) || null;
-                        if (!selector) return { ...node, screenshot: null };
-                        const screenshot = await getElementScreenshot(page, selector);
-                        return { ...node, screenshot };
-                    })
-                );
-                return { ...pass, nodes: nodesWithScreens };
-            })
-        );
+        // Process Axe passes WITHOUT screenshots
+        const axePassesWithScreens = (axeResults.passes || []).map((pass) => ({
+            ...pass,
+            nodes: pass.nodes.map((node) => ({ ...node, screenshot: null }))
+        }));
 
         // Return all results with screenshots
         return {
