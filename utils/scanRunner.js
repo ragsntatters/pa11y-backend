@@ -151,6 +151,17 @@ export const runScan = async (url, wcagLevel = 'AA') => {
         await page.setUserAgent(USER_AGENT);
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
 
+        // Cloudflare challenge detection
+        const pageContent = await page.content();
+        if (
+          pageContent.includes('cf-browser-verification') ||
+          pageContent.includes('Attention Required! | Cloudflare') ||
+          pageContent.includes('challenge-form') ||
+          pageContent.includes('Cloudflare Ray ID')
+        ) {
+          throw new Error('Cloudflare protection detected. Automated scans are not possible for this site. Please whitelist the Google Cloud Platform (GCP) IP range in your Cloudflare dashboard to allow scans.');
+        }
+
         // Inject axe-core
         await page.addScriptTag({ url: 'https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.8.2/axe.min.js' });
         axeResults = await page.evaluate(async (axeTag) => {
