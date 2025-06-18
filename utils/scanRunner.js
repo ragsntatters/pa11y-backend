@@ -154,7 +154,7 @@ export const runScan = async (url, wcagLevel = 'AA') => {
     // Run axe-core and take per-issue screenshots
     const browser = await puppeteer.launch({
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        headless: false // Switch to headful mode
+        headless: 'new' // Revert to headless mode
     });
 
     let axeResults = null;
@@ -167,33 +167,6 @@ export const runScan = async (url, wcagLevel = 'AA') => {
         await page.setViewport({ width: 1280, height: 800 });
         await page.setUserAgent(USER_AGENT);
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
-
-        // Wait a few seconds for Cloudflare challenge to possibly resolve
-        await new Promise(res => setTimeout(res, 4000));
-        const pageContent = await page.content();
-        const lowerContent = pageContent.toLowerCase();
-        // Improved Cloudflare challenge detection
-        const isCloudflare = (
-          lowerContent.includes('cf-browser-verification') ||
-          lowerContent.includes('attention required! | cloudflare') ||
-          lowerContent.includes('challenge-form') ||
-          lowerContent.includes('cloudflare ray id') ||
-          lowerContent.includes('just a moment...') ||
-          lowerContent.includes('checking your browser before accessing') ||
-          lowerContent.includes('data-cf-settings') ||
-          lowerContent.includes('data-cf-beacon') ||
-          lowerContent.includes('ray id:') ||
-          lowerContent.includes('please enable javascript and cookies to continue') ||
-          /<meta[^>]+http-equiv=["']?refresh/i.test(pageContent) ||
-          /<div[^>]+id=["']?cf-spinner/i.test(pageContent)
-        );
-        // Also treat as Cloudflare if the page is suspiciously empty or only a spinner
-        const bodyText = await page.evaluate(() => document.body && document.body.innerText ? document.body.innerText.trim() : '');
-        const onlySpinner = /cf-spinner|cloudflare/i.test(pageContent) && bodyText.length < 20;
-        const isSuspiciouslyEmpty = bodyText.length < 20 && (pageContent.length < 2000);
-        if (isCloudflare || onlySpinner || isSuspiciouslyEmpty) {
-          throw new Error('Cloudflare protection detected. Automated scans are not possible for this site. Please whitelist the Google Cloud Platform (GCP) IP range in your Cloudflare dashboard to allow scans.');
-        }
 
         // Inject axe-core
         await page.addScriptTag({ url: 'https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.8.2/axe.min.js' });
@@ -250,6 +223,30 @@ export const runScan = async (url, wcagLevel = 'AA') => {
             ...pass,
             nodes: pass.nodes.map((node) => ({ ...node, screenshot: null }))
         }));
+
+        // After scan, check for Cloudflare challenge
+        const pageContent = await page.content();
+        const lowerContent = pageContent.toLowerCase();
+        const isCloudflare = (
+          lowerContent.includes('cf-browser-verification') ||
+          lowerContent.includes('attention required! | cloudflare') ||
+          lowerContent.includes('challenge-form') ||
+          lowerContent.includes('cloudflare ray id') ||
+          lowerContent.includes('just a moment...') ||
+          lowerContent.includes('checking your browser before accessing') ||
+          lowerContent.includes('data-cf-settings') ||
+          lowerContent.includes('data-cf-beacon') ||
+          lowerContent.includes('ray id:') ||
+          lowerContent.includes('please enable javascript and cookies to continue') ||
+          /<meta[^>]+http-equiv=["']?refresh/i.test(pageContent) ||
+          /<div[^>]+id=["']?cf-spinner/i.test(pageContent)
+        );
+        const bodyText = await page.evaluate(() => document.body && document.body.innerText ? document.body.innerText.trim() : '');
+        const onlySpinner = /cf-spinner|cloudflare/i.test(pageContent) && bodyText.length < 20;
+        const isSuspiciouslyEmpty = bodyText.length < 20 && (pageContent.length < 2000);
+        if (isCloudflare || onlySpinner || isSuspiciouslyEmpty) {
+          throw new Error('Cloudflare protection detected. Automated scans are not possible for this site. Please whitelist the Google Cloud Platform (GCP) IP range in your Cloudflare dashboard to allow scans.');
+        }
 
         // Return all results with screenshots
         return {
