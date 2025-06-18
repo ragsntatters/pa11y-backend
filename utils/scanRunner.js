@@ -168,6 +168,14 @@ export const runScan = async (url, wcagLevel = 'AA') => {
         await page.setUserAgent(USER_AGENT);
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
 
+        // Take a screenshot of the initial viewport
+        let pageScreenshot = null;
+        try {
+          pageScreenshot = await page.screenshot({ encoding: 'base64', fullPage: false });
+        } catch (e) {
+          console.error('Failed to take page screenshot:', e);
+        }
+
         // Inject axe-core
         await page.addScriptTag({ url: 'https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.8.2/axe.min.js' });
         axeResults = await page.evaluate(async (axeTag) => {
@@ -259,7 +267,8 @@ export const runScan = async (url, wcagLevel = 'AA') => {
                 ...axeResults, 
                 violations: axeViolationsWithScreens,
                 passes: axePassesWithScreens
-            }
+            },
+            pageScreenshot: pageScreenshot ? `data:image/png;base64,${pageScreenshot}` : null
         };
 
     } catch (e) {
