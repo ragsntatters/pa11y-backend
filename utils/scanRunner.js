@@ -1,5 +1,7 @@
 import pa11y from 'pa11y';
 import puppeteer from 'puppeteer';
+import dns from 'dns/promises';
+import net from 'net';
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
 
@@ -116,6 +118,21 @@ async function getElementScreenshot(page, selector, options = {}) {
 }
 
 export const runScan = async (url, wcagLevel = 'AA') => {
+    // SSRF protection: block internal/private IPs
+    try {
+        const { hostname } = new URL(url);
+        const addresses = await dns.lookup(hostname, { all: true });
+        for (const addr of addresses) {
+            if (isPrivateIp(addr.address)) {
+                throw new Error('Scanning internal/private IP addresses is not allowed for security reasons.');
+            }
+        }
+    } catch (e) {
+        if (e.code === 'ENOTFOUND') {
+            throw new Error('Invalid or unreachable domain.');
+        }
+        throw e;
+    }
     // Run Pa11y with passed tests included
     const pa11yStandard = wcagLevel === 'AAA' ? 'WCAG2AAA' : 'WCAG2AA';
     const axeTag = wcagLevel === 'AAA' ? 'wcag2aaa' : 'wcag2aa';
@@ -243,3 +260,25 @@ export const runScan = async (url, wcagLevel = 'AA') => {
         await browser.close();
     }
 };
+
+function isPrivateIp(ip) {
+    // IPv4
+    if (net.isIPv4(ip)) {
+        return (
+            ip.startsWith('10.') ||
+            ip.startsWith('192.168.') ||
+            ip.startsWith('127.') ||
+            ip.startsWith('169.254.') ||
+            (ip >= '172.16.0.0' && ip <= '172.31.255.255')
+        );
+    }
+    // IPv6
+    if (net.isIPv6(ip)) {
+        return (
+            ip === '::1' ||
+            ip.startsWith('fc') ||
+            ip.startsWith('fd')
+        );
+    }
+    return false;
+}
