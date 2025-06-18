@@ -173,7 +173,7 @@ export const runScan = async (url, wcagLevel = 'AA') => {
         const pageContent = await page.content();
         const lowerContent = pageContent.toLowerCase();
         // Improved Cloudflare challenge detection
-        if (
+        const isCloudflare = (
           lowerContent.includes('cf-browser-verification') ||
           lowerContent.includes('attention required! | cloudflare') ||
           lowerContent.includes('challenge-form') ||
@@ -186,7 +186,12 @@ export const runScan = async (url, wcagLevel = 'AA') => {
           lowerContent.includes('please enable javascript and cookies to continue') ||
           /<meta[^>]+http-equiv=["']?refresh/i.test(pageContent) ||
           /<div[^>]+id=["']?cf-spinner/i.test(pageContent)
-        ) {
+        );
+        // Also treat as Cloudflare if the page is suspiciously empty or only a spinner
+        const bodyText = await page.evaluate(() => document.body && document.body.innerText ? document.body.innerText.trim() : '');
+        const onlySpinner = /cf-spinner|cloudflare/i.test(pageContent) && bodyText.length < 20;
+        const isSuspiciouslyEmpty = bodyText.length < 20 && (pageContent.length < 2000);
+        if (isCloudflare || onlySpinner || isSuspiciouslyEmpty) {
           throw new Error('Cloudflare protection detected. Automated scans are not possible for this site. Please whitelist the Google Cloud Platform (GCP) IP range in your Cloudflare dashboard to allow scans.');
         }
 
