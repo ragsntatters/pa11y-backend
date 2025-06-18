@@ -154,7 +154,7 @@ export const runScan = async (url, wcagLevel = 'AA') => {
     // Run axe-core and take per-issue screenshots
     const browser = await puppeteer.launch({
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        headless: 'new'
+        headless: false // Switch to headful mode
     });
 
     let axeResults = null;
