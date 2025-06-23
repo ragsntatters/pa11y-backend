@@ -1,0 +1,17 @@
+[build]
+builder = "nixpacks"
+buildCommand = "npm install"
+
+[deploy]
+startCommand = "node index.js"
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+
+[env]
+NODE_ENV = "production"
+PORT = "5000"
+DOMAIN = "pa11y-backend.wookongmarketing.com"
+FRONTEND_URL = "https://pa11y.wookongmarketing.com"
+MONGODB_URI = "required"
+CLERK_SECRET_KEY = "required"
+CHROME_BIN = "/usr/bin/chromium-browser" 
