@@ -415,6 +415,58 @@ export const runScan = async (url, wcagLevel = 'AA') => {
             nodes: pass.nodes.map((node) => ({ ...node, screenshot: null }))
         }));
 
+        // Debug logging to check data consistency
+        console.log('Pa11y results:', {
+            issues: pa11yIssuesWithScreens.length,
+            passed: pa11yPassedWithScreens.length,
+            notices: pa11yResult.notices?.length || 0,
+            warnings: pa11yResult.warnings?.length || 0
+        });
+        
+        console.log('Axe results:', {
+            violations: axeViolationsWithScreens.length,
+            passes: axePassesWithScreens.length,
+            incomplete: axeResults.incomplete?.length || 0
+        });
+
+        // Create a unified result structure for consistent counting
+        const unifiedIssues = [
+            ...pa11yIssuesWithScreens,
+            ...axeViolationsWithScreens.flatMap(violation => 
+                violation.nodes.map(node => ({
+                    ...node,
+                    type: 'axe',
+                    rule: violation.id,
+                    description: violation.description,
+                    help: violation.help,
+                    helpUrl: violation.helpUrl,
+                    impact: violation.impact,
+                    tags: violation.tags
+                }))
+            )
+        ];
+
+        const unifiedPassed = [
+            ...pa11yPassedWithScreens,
+            ...axePassesWithScreens.flatMap(pass => 
+                pass.nodes.map(node => ({
+                    ...node,
+                    type: 'axe',
+                    rule: pass.id,
+                    description: pass.description,
+                    help: pass.help,
+                    helpUrl: pass.helpUrl,
+                    impact: pass.impact,
+                    tags: pass.tags
+                }))
+            )
+        ];
+
+        console.log('Unified results:', {
+            issues: unifiedIssues.length,
+            passed: unifiedPassed.length
+        });
+
         // Return all results with screenshots
         return {
             pa11y: { 
@@ -426,6 +478,10 @@ export const runScan = async (url, wcagLevel = 'AA') => {
                 ...axeResults, 
                 violations: axeViolationsWithScreens,
                 passes: axePassesWithScreens
+            },
+            unified: {
+                issues: unifiedIssues,
+                passed: unifiedPassed
             },
             pageScreenshot: pageScreenshot ? `data:image/png;base64,${pageScreenshot}` : null
         };
