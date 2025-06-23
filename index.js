@@ -106,10 +106,14 @@ app.post('/api/public-scan', async (req, res) => {
         console.log(`Scan completed for ${url}`);
       })
       .catch(async (error) => {
-        await mongoose.model('Report').findByIdAndUpdate(pendingReport._id, {
+        console.log(`Public scan error caught: ${error.message}`);
+        const updateData = {
           status: 'error',
           result: { error: error.message }
-        });
+        };
+        console.log('Updating report with error data:', updateData);
+        await mongoose.model('Report').findByIdAndUpdate(pendingReport._id, updateData);
+        console.log(`Public scan error stored in database for ${url}`);
         console.error('Scan error:', error);
       });
   } catch (error) {
@@ -154,6 +158,11 @@ app.get('/api/report/:id', async (req, res) => {
     if (!report) {
       return res.status(404).json({ error: 'Report not found' });
     }
+    console.log(`Report ${req.params.id} retrieved:`, {
+      status: report.status,
+      error: report.result?.error,
+      hasResult: !!report.result
+    });
     res.json(report);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch report', details: error.message });
@@ -204,10 +213,14 @@ app.post('/api/admin-scan', authMiddleware, async (req, res) => {
         console.log(`Admin scan completed for ${url}`);
       })
       .catch(async (error) => {
-        await mongoose.model('Report').findByIdAndUpdate(pendingReport._id, {
+        console.log(`Admin scan error caught: ${error.message}`);
+        const updateData = {
           status: 'error',
           result: { error: error.message }
-        });
+        };
+        console.log('Updating report with error data:', updateData);
+        await mongoose.model('Report').findByIdAndUpdate(pendingReport._id, updateData);
+        console.log(`Admin scan error stored in database for ${url}`);
         console.error('Admin scan error:', error);
       });
   } catch (error) {
