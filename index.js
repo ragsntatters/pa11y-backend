@@ -107,6 +107,8 @@ app.post('/api/public-scan', async (req, res) => {
       })
       .catch(async (error) => {
         console.log(`Public scan error caught: ${error.message}`);
+        console.log(`Error stack: ${error.stack}`);
+        console.log(`Error type: ${error.constructor.name}`);
         const updateData = {
           status: 'error',
           result: { error: error.message }
@@ -161,7 +163,9 @@ app.get('/api/report/:id', async (req, res) => {
     console.log(`Report ${req.params.id} retrieved:`, {
       status: report.status,
       error: report.result?.error,
-      hasResult: !!report.result
+      hasResult: !!report.result,
+      resultKeys: report.result ? Object.keys(report.result) : [],
+      fullResult: report.result
     });
     res.json(report);
   } catch (error) {
@@ -214,6 +218,8 @@ app.post('/api/admin-scan', authMiddleware, async (req, res) => {
       })
       .catch(async (error) => {
         console.log(`Admin scan error caught: ${error.message}`);
+        console.log(`Error stack: ${error.stack}`);
+        console.log(`Error type: ${error.constructor.name}`);
         const updateData = {
           status: 'error',
           result: { error: error.message }
