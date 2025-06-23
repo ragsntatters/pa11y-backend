@@ -150,8 +150,8 @@ export const runScan = async (url, wcagLevel = 'AA') => {
         throw e;
     }
 
-    // Create a single stealth-enabled browser instance
-    const browser = await puppeteer.launch({
+    // First, check for Cloudflare using stealth browser
+    const stealthBrowser = await puppeteer.launch({
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -167,22 +167,14 @@ export const runScan = async (url, wcagLevel = 'AA') => {
         headless: 'new'
     });
 
-    let pa11yResult = null;
-    let axeResults = null;
-    let pa11yIssuesWithScreens = [];
-    let axeViolationsWithScreens = [];
-    let pa11yPassedWithScreens = [];
+    let isCloudflareProtected = false;
 
     try {
-        const page = await browser.newPage();
+        const stealthPage = await stealthBrowser.newPage();
+        await stealthPage.setViewport({ width: 1280, height: 800 });
+        await stealthPage.setUserAgent(getRandomUserAgent());
         
-        // Enhanced stealth configuration
-        await page.setViewport({ width: 1280, height: 800 });
-        const userAgent = getRandomUserAgent();
-        await page.setUserAgent(userAgent);
-        
-        // Set additional headers to appear more human-like
-        await page.setExtraHTTPHeaders({
+        await stealthPage.setExtraHTTPHeaders({
             'Accept-Language': 'en-US,en;q=0.9',
             'Accept-Encoding': 'gzip, deflate, br',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -190,22 +182,102 @@ export const runScan = async (url, wcagLevel = 'AA') => {
             'Pragma': 'no-cache'
         });
 
-        // Navigate with enhanced strategy
-        await page.goto(url, { 
+        await stealthPage.goto(url, { 
             waitUntil: 'domcontentloaded', 
             timeout: 90000 
         });
 
-        // Wait for page to fully load
         await new Promise(resolve => setTimeout(resolve, 3000));
-
-        // Simulate human-like interactions
-        await page.mouse.move(100, 100);
-        await page.keyboard.press('ArrowDown');
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        // Additional wait for any JavaScript challenges
+        await stealthPage.mouse.move(100, 100);
+        await stealthPage.keyboard.press('ArrowDown');
         await new Promise(resolve => setTimeout(resolve, 2000));
+
+        const pageContent = await stealthPage.content();
+        const lowerContent = pageContent.toLowerCase();
+        const bodyText = await stealthPage.evaluate(() => document.body && document.body.innerText ? document.body.innerText.trim() : '');
+        
+        isCloudflareProtected = (
+            lowerContent.includes('cf-browser-verification') ||
+            lowerContent.includes('attention required! | cloudflare') ||
+            lowerContent.includes('challenge-form') ||
+            lowerContent.includes('cloudflare ray id') ||
+            lowerContent.includes('just a moment...') ||
+            lowerContent.includes('checking your browser before accessing') ||
+            lowerContent.includes('data-cf-settings') ||
+            lowerContent.includes('data-cf-beacon') ||
+            lowerContent.includes('ray id:') ||
+            lowerContent.includes('please enable javascript and cookies to continue') ||
+            /<meta[^>]+http-equiv=["']?refresh/i.test(pageContent) ||
+            /<div[^>]+id=["']?cf-spinner/i.test(pageContent) ||
+            /<div[^>]+class=["'][^"']*cf-[^"']*["']/i.test(pageContent) ||
+            (/cf-spinner|cloudflare/i.test(pageContent) && bodyText.length < 20) ||
+            (bodyText.length < 20 && pageContent.length < 2000)
+        );
+
+    } catch (e) {
+        console.error('Stealth check failed:', e);
+    } finally {
+        await stealthBrowser.close();
+    }
+
+    if (isCloudflareProtected) {
+        throw new Error('Cloudflare protection detected. Automated scans are not possible for this site. Please whitelist the Google Cloud Platform (GCP) IP range in your Cloudflare dashboard to allow scans.');
+    }
+
+    // Now run Pa11y with standard settings for accurate testing
+    const pa11yStandard = wcagLevel === 'AAA' ? 'WCAG2AAA' : 'WCAG2AA';
+    const axeTag = wcagLevel === 'AAA' ? 'wcag2aaa' : 'wcag2aa';
+    
+    let pa11yResult = null;
+    let axeResults = null;
+    let pa11yIssuesWithScreens = [];
+    let axeViolationsWithScreens = [];
+    let pa11yPassedWithScreens = [];
+
+    // Run Pa11y with standard configuration
+    try {
+        pa11yResult = await pa11y(url, {
+            chromeLaunchConfig: {
+                args: [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-gpu'
+                ],
+                headless: 'new'
+            },
+            includeNotices: true,
+            includeWarnings: true,
+            standard: pa11yStandard,
+            includePassed: true,
+            timeout: 90000
+        });
+    } catch (pa11yError) {
+        console.error('Pa11y scan failed:', pa11yError);
+        pa11yResult = {
+            issues: [],
+            passed: [],
+            notices: [],
+            warnings: [],
+            error: pa11yError.message
+        };
+    }
+
+    // Run axe-core separately for additional testing
+    const browser = await puppeteer.launch({
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu'
+        ],
+        headless: 'new'
+    });
+
+    try {
+        const page = await browser.newPage();
+        await page.setViewport({ width: 1280, height: 800 });
+        await page.goto(url, { waitUntil: 'networkidle2', timeout: 90000 });
 
         // Take a screenshot of the initial viewport
         let pageScreenshot = null;
@@ -213,32 +285,6 @@ export const runScan = async (url, wcagLevel = 'AA') => {
             pageScreenshot = await page.screenshot({ encoding: 'base64', fullPage: false });
         } catch (e) {
             console.error('Failed to take page screenshot:', e);
-        }
-
-        // Run Pa11y on the same page
-        const pa11yStandard = wcagLevel === 'AAA' ? 'WCAG2AAA' : 'WCAG2AA';
-        const axeTag = wcagLevel === 'AAA' ? 'wcag2aaa' : 'wcag2aa';
-        
-        try {
-            // Use Pa11y's test function instead of the full scan
-            const pa11yTest = await import('pa11y');
-            pa11yResult = await pa11yTest.default.test(page, {
-                includeNotices: true,
-                includeWarnings: true,
-                standard: pa11yStandard,
-                includePassed: true,
-                timeout: 90000
-            });
-        } catch (pa11yError) {
-            console.error('Pa11y test failed:', pa11yError);
-            // Create a fallback result structure
-            pa11yResult = {
-                issues: [],
-                passed: [],
-                notices: [],
-                warnings: [],
-                error: pa11yError.message
-            };
         }
 
         // Inject axe-core and run it
@@ -263,7 +309,6 @@ export const runScan = async (url, wcagLevel = 'AA') => {
             }, axeTag);
         } catch (axeError) {
             console.error('Axe-core test failed:', axeError);
-            // Create a fallback result structure
             axeResults = {
                 violations: [],
                 passes: [],
@@ -307,34 +352,6 @@ export const runScan = async (url, wcagLevel = 'AA') => {
             ...pass,
             nodes: pass.nodes.map((node) => ({ ...node, screenshot: null }))
         }));
-
-        // Enhanced Cloudflare detection with longer wait
-        await new Promise(resolve => setTimeout(resolve, 4000)); // Wait 4 seconds after scan
-        const pageContent = await page.content();
-        const lowerContent = pageContent.toLowerCase();
-        const isCloudflare = (
-            lowerContent.includes('cf-browser-verification') ||
-            lowerContent.includes('attention required! | cloudflare') ||
-            lowerContent.includes('challenge-form') ||
-            lowerContent.includes('cloudflare ray id') ||
-            lowerContent.includes('just a moment...') ||
-            lowerContent.includes('checking your browser before accessing') ||
-            lowerContent.includes('data-cf-settings') ||
-            lowerContent.includes('data-cf-beacon') ||
-            lowerContent.includes('ray id:') ||
-            lowerContent.includes('please enable javascript and cookies to continue') ||
-            /<meta[^>]+http-equiv=["']?refresh/i.test(pageContent) ||
-            /<div[^>]+id=["']?cf-spinner/i.test(pageContent) ||
-            /<div[^>]+class=["'][^"']*cf-[^"']*["']/i.test(pageContent)
-        );
-        
-        const bodyText = await page.evaluate(() => document.body && document.body.innerText ? document.body.innerText.trim() : '');
-        const onlySpinner = /cf-spinner|cloudflare/i.test(pageContent) && bodyText.length < 20;
-        const isSuspiciouslyEmpty = bodyText.length < 20 && (pageContent.length < 2000);
-        
-        if (isCloudflare || onlySpinner || isSuspiciouslyEmpty) {
-            throw new Error('Cloudflare protection detected. Automated scans are not possible for this site. Please whitelist the Google Cloud Platform (GCP) IP range in your Cloudflare dashboard to allow scans.');
-        }
 
         // Return all results with screenshots
         return {
