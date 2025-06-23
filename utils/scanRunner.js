@@ -162,7 +162,28 @@ export const runScan = async (url, wcagLevel = 'AA') => {
             '--no-zygote',
             '--disable-gpu',
             '--disable-web-security',
-            '--disable-features=VizDisplayCompositor'
+            '--disable-features=VizDisplayCompositor',
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-renderer-backgrounding',
+            '--disable-field-trial-config',
+            '--disable-ipc-flooding-protection',
+            '--enable-features=NetworkService,NetworkServiceLogging',
+            '--force-color-profile=srgb',
+            '--metrics-recording-only',
+            '--no-default-browser-check',
+            '--no-pings',
+            '--password-store=basic',
+            '--use-mock-keychain',
+            '--hide-scrollbars',
+            '--mute-audio',
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--disable-gpu'
         ],
         headless: 'new'
     });
@@ -171,15 +192,46 @@ export const runScan = async (url, wcagLevel = 'AA') => {
 
     try {
         const stealthPage = await stealthBrowser.newPage();
-        await stealthPage.setViewport({ width: 1280, height: 800 });
-        await stealthPage.setUserAgent(getRandomUserAgent());
         
+        // Enhanced stealth configuration
+        await stealthPage.setViewport({ width: 1366, height: 768 });
+        const userAgent = getRandomUserAgent();
+        await stealthPage.setUserAgent(userAgent);
+        
+        // Set additional headers to appear more human-like
         await stealthPage.setExtraHTTPHeaders({
-            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Language': 'en-US,en;q=0.9,en-GB;q=0.8',
             'Accept-Encoding': 'gzip, deflate, br',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
+            'Cache-Control': 'max-age=0',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Upgrade-Insecure-Requests': '1'
+        });
+
+        // Remove webdriver property
+        await stealthPage.evaluateOnNewDocument(() => {
+            delete navigator.__proto__.webdriver;
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined,
+            });
+        });
+
+        // Add more realistic browser properties
+        await stealthPage.evaluateOnNewDocument(() => {
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [1, 2, 3, 4, 5],
+            });
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['en-US', 'en'],
+            });
+            Object.defineProperty(navigator, 'permissions', {
+                get: () => ({
+                    query: async () => ({ state: 'granted' })
+                }),
+            });
         });
 
         await stealthPage.goto(url, { 
@@ -187,10 +239,20 @@ export const runScan = async (url, wcagLevel = 'AA') => {
             timeout: 90000 
         });
 
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        await stealthPage.mouse.move(100, 100);
+        // More realistic waiting and interactions
+        await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 2000));
+        
+        // Simulate more human-like behavior
+        await stealthPage.mouse.move(100 + Math.random() * 200, 100 + Math.random() * 200);
+        await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
         await stealthPage.keyboard.press('ArrowDown');
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
+        
+        // Scroll a bit
+        await stealthPage.evaluate(() => {
+            window.scrollTo(0, Math.random() * 100);
+        });
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
         const pageContent = await stealthPage.content();
         const lowerContent = pageContent.toLowerCase();
