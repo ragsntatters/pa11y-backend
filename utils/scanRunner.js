@@ -197,15 +197,15 @@ export const runScan = async (url, wcagLevel = 'AA') => {
         });
 
         // Wait for page to fully load
-        await page.waitForTimeout(3000);
+        await new Promise(resolve => setTimeout(resolve, 3000));
 
         // Simulate human-like interactions
         await page.mouse.move(100, 100);
         await page.keyboard.press('ArrowDown');
-        await page.waitForTimeout(1000);
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
         // Additional wait for any JavaScript challenges
-        await page.waitForTimeout(2000);
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
         // Take a screenshot of the initial viewport
         let pageScreenshot = null;
@@ -219,35 +219,58 @@ export const runScan = async (url, wcagLevel = 'AA') => {
         const pa11yStandard = wcagLevel === 'AAA' ? 'WCAG2AAA' : 'WCAG2AA';
         const axeTag = wcagLevel === 'AAA' ? 'wcag2aaa' : 'wcag2aa';
         
-        // Use Pa11y's test function instead of the full scan
-        const pa11yTest = await import('pa11y');
-        pa11yResult = await pa11yTest.default.test(page, {
-            includeNotices: true,
-            includeWarnings: true,
-            standard: pa11yStandard,
-            includePassed: true,
-            timeout: 90000
-        });
+        try {
+            // Use Pa11y's test function instead of the full scan
+            const pa11yTest = await import('pa11y');
+            pa11yResult = await pa11yTest.default.test(page, {
+                includeNotices: true,
+                includeWarnings: true,
+                standard: pa11yStandard,
+                includePassed: true,
+                timeout: 90000
+            });
+        } catch (pa11yError) {
+            console.error('Pa11y test failed:', pa11yError);
+            // Create a fallback result structure
+            pa11yResult = {
+                issues: [],
+                passed: [],
+                notices: [],
+                warnings: [],
+                error: pa11yError.message
+            };
+        }
 
         // Inject axe-core and run it
-        await page.addScriptTag({ url: 'https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.8.2/axe.min.js' });
-        axeResults = await page.evaluate(async (axeTag) => {
-            return await window.axe.run(document, { 
-                resultTypes: ['violations', 'passes', 'incomplete'],
-                runOnly: {
-                    type: 'tag',
-                    values: [axeTag]
-                },
-                rules: {
-                    'color-contrast': { enabled: true },
-                    'document-title': { enabled: true },
-                    'html-has-lang': { enabled: true },
-                    'image-alt': { enabled: true },
-                    'link-name': { enabled: true },
-                    'meta-viewport': { enabled: true }
-                }
-            });
-        }, axeTag);
+        try {
+            await page.addScriptTag({ url: 'https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.8.2/axe.min.js' });
+            axeResults = await page.evaluate(async (axeTag) => {
+                return await window.axe.run(document, { 
+                    resultTypes: ['violations', 'passes', 'incomplete'],
+                    runOnly: {
+                        type: 'tag',
+                        values: [axeTag]
+                    },
+                    rules: {
+                        'color-contrast': { enabled: true },
+                        'document-title': { enabled: true },
+                        'html-has-lang': { enabled: true },
+                        'image-alt': { enabled: true },
+                        'link-name': { enabled: true },
+                        'meta-viewport': { enabled: true }
+                    }
+                });
+            }, axeTag);
+        } catch (axeError) {
+            console.error('Axe-core test failed:', axeError);
+            // Create a fallback result structure
+            axeResults = {
+                violations: [],
+                passes: [],
+                incomplete: [],
+                error: axeError.message
+            };
+        }
 
         // Process Pa11y issues with screenshots
         pa11yIssuesWithScreens = await Promise.all(
@@ -286,7 +309,7 @@ export const runScan = async (url, wcagLevel = 'AA') => {
         }));
 
         // Enhanced Cloudflare detection with longer wait
-        await page.waitForTimeout(4000); // Wait 4 seconds after scan
+        await new Promise(resolve => setTimeout(resolve, 4000)); // Wait 4 seconds after scan
         const pageContent = await page.content();
         const lowerContent = pageContent.toLowerCase();
         const isCloudflare = (
